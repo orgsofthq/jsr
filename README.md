@@ -2,7 +2,7 @@
 
 [![JSR](https://jsr.io/badges/@orgsoft/jsr)](https://jsr.io/@orgsoft/jsr)
 
-A comprehensive TypeScript library, CLI tool, and MCP server for exploring packages on [jsr.io](https://jsr.io). 
+An MCP server, CLI utility, and TypeScript library for exploring packages across [jsr.io](https://jsr.io). 
 
 JSR is a modern JavaScript repository and alternative to NPM, providing rich TypeScript support, modern features, and seamless integration with Deno.
 

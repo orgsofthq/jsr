@@ -92,7 +92,23 @@ const commands: Record<string, CLICommand> = {
                 console.log(`\n📦 Found ${results.hits.length} packages:`);
                 console.log("─".repeat(60));
                 
-                const formattedResults = formatSearchResults(query, results.hits.map((hit: any) => hit.document));
+                // Convert enhanced hits to the format expected by formatSearchResults
+                const packages = results.hits.map((hit: any) => {
+                    const pkg = hit.document;
+                    const downloads = hit.downloads;
+                    
+                    return {
+                        ...pkg,
+                        score: hit.score,
+                        // Add download information if available
+                        totalDownloads: downloads?.totalDownloads || 0,
+                        recentDownloads: downloads?.recentDownloads || 0,
+                        // Use download summary version info if package info is missing
+                        latestVersion: pkg.latestVersion || downloads?.latestVersion || 'Unknown'
+                    };
+                });
+                
+                const formattedResults = formatSearchResults(query, packages);
                 console.log(formattedResults);
             } catch (error) {
                 console.error("Search failed:", getErrorMessage(error));
@@ -128,6 +144,7 @@ const commands: Record<string, CLICommand> = {
                     return;
                 }
 
+                // findSimilarPackages already returns enhanced hits with download information
                 const formattedResults = formatSimilarPackages(results.originalPackage, results.hits);
                 console.log(formattedResults);
             } catch (error) {

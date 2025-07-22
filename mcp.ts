@@ -61,52 +61,27 @@ if (Deno.permissions.querySync({ name: "run" }).state === "granted") {
     try {
       const results = await queryOrama(query, { limit });
 
-      const packages = results.hits?.map((hit: any) => ({
-        id: hit.document.id,
-        name: hit.document.name,
-        scope: hit.document.scope,
-        description: hit.document.description,
-        score: hit.score,
-        runtimeCompat: hit.document.runtimeCompat,
-        updatedAt: hit.document.updatedAt,
-        latestVersion: hit.document.latestVersion
-      })) || [];
+      // Convert enhanced hits to the format expected by formatSearchResults
+      const packages = results.hits?.map((hit: any) => {
+        const pkg = hit.document;
+        const downloads = hit.downloads;
+        
+        return {
+          id: pkg.id,
+          name: pkg.name,
+          scope: pkg.scope,
+          description: pkg.description,
+          score: hit.score,
+          runtimeCompat: pkg.runtimeCompat,
+          updatedAt: pkg.updatedAt,
+          latestVersion: pkg.latestVersion || downloads?.latestVersion || 'Unknown',
+          // Include download information from enhanced results
+          totalDownloads: downloads?.totalDownloads || 0,
+          recentDownloads: downloads?.recentDownloads || 0
+        };
+      }) || [];
 
-      // Fetch download stats for each package (in parallel)
-      const packagesWithDownloads = await Promise.all(
-        packages.map(async (pkg: any) => {
-          try {
-            const downloadSummary = await getPackageDownloadSummary(pkg.scope, pkg.name);
-            // Also fetch basic package details if version/updated info is missing
-            let packageDetails = null;
-            if (!pkg.latestVersion || !pkg.updatedAt) {
-              try {
-                packageDetails = await getPackageDetails(pkg.scope, pkg.name);
-              } catch (detailError) {
-                // Ignore if details fetch fails
-              }
-            }
-
-            return {
-              ...pkg,
-              totalDownloads: downloadSummary.totalDownloads || 0,
-              recentDownloads: downloadSummary.recentDownloads || 0,
-              latestVersion: pkg.latestVersion || packageDetails?.latestVersion || downloadSummary.latestVersion || 'Unknown',
-              updatedAt: pkg.updatedAt || packageDetails?.updatedAt || undefined
-            };
-          } catch (error) {
-            return {
-              ...pkg,
-              totalDownloads: 0,
-              recentDownloads: 0,
-              latestVersion: pkg.latestVersion || 'Unknown',
-              updatedAt: pkg.updatedAt || undefined
-            };
-          }
-        })
-      );
-
-      const summary = formatSearchResults(query, packagesWithDownloads);
+      const summary = formatSearchResults(query, packages);
 
       return {
         content: [{
@@ -115,8 +90,8 @@ if (Deno.permissions.querySync({ name: "run" }).state === "granted") {
         }],
         meta: {
           searchQuery: query,
-          totalResults: packagesWithDownloads.length,
-          packages: packagesWithDownloads
+          totalResults: packages.length,
+          packages: packages
         }
       };
     } catch (error) {
@@ -150,52 +125,28 @@ server.tool("find_similar", {
     }
 
     const originalPkg = results.originalPackage;
-    const similarPackages = results.hits?.map((hit: any) => ({
-      id: hit.document.id,
-      name: hit.document.name,
-      scope: hit.document.scope,
-      description: hit.document.description,
-      score: hit.score,
-      runtimeCompat: hit.document.runtimeCompat,
-      updatedAt: hit.document.updatedAt,
-      latestVersion: hit.document.latestVersion
-    })) || [];
+    
+    // findSimilarPackages already returns enhanced hits with download information
+    const similarPackages = results.hits?.map((hit: any) => {
+      const pkg = hit.document;
+      const downloads = hit.downloads;
+      
+      return {
+        id: pkg.id,
+        name: pkg.name,
+        scope: pkg.scope,
+        description: pkg.description,
+        score: hit.score,
+        runtimeCompat: pkg.runtimeCompat,
+        updatedAt: pkg.updatedAt,
+        latestVersion: pkg.latestVersion || downloads?.latestVersion || 'Unknown',
+        // Include download information from enhanced results
+        totalDownloads: downloads?.totalDownloads || 0,
+        recentDownloads: downloads?.recentDownloads || 0
+      };
+    }) || [];
 
-    // Fetch download stats for similar packages (in parallel)
-    const similarWithDownloads = await Promise.all(
-      similarPackages.map(async (pkg: any) => {
-        try {
-          const downloadSummary = await getPackageDownloadSummary(pkg.scope, pkg.name);
-          // Also fetch basic package details if version/updated info is missing
-          let packageDetails = null;
-          if (!pkg.latestVersion || !pkg.updatedAt) {
-            try {
-              packageDetails = await getPackageDetails(pkg.scope, pkg.name);
-            } catch (detailError) {
-              // Ignore if details fetch fails
-            }
-          }
-
-          return {
-            ...pkg,
-            totalDownloads: downloadSummary.totalDownloads || 0,
-            recentDownloads: downloadSummary.recentDownloads || 0,
-            latestVersion: pkg.latestVersion || packageDetails?.latestVersion || downloadSummary.latestVersion || 'Unknown',
-            updatedAt: pkg.updatedAt || packageDetails?.updatedAt || undefined
-          };
-        } catch (error) {
-          return {
-            ...pkg,
-            totalDownloads: 0,
-            recentDownloads: 0,
-            latestVersion: pkg.latestVersion || 'Unknown',
-            updatedAt: pkg.updatedAt || undefined
-          };
-        }
-      })
-    );
-
-    const summary = formatSimilarPackages(originalPkg, similarWithDownloads);
+    const summary = formatSimilarPackages(originalPkg, similarPackages);
 
     return {
       content: [{
@@ -204,8 +155,8 @@ server.tool("find_similar", {
       }],
       meta: {
         originalPackage: originalPkg,
-        similarPackages: similarWithDownloads,
-        totalResults: similarWithDownloads.length
+        similarPackages: similarPackages,
+        totalResults: similarPackages.length
       }
     };
   } catch (error) {
@@ -226,60 +177,35 @@ server.tool("discover", {
   try {
     const results = await relevanceSearch(category, { limit });
 
-    const packages = results.hits?.map((hit: any) => ({
-      id: hit.document.id,
-      name: hit.document.name,
-      scope: hit.document.scope,
-      description: hit.document.description,
-      score: hit.score,
-      runtimeCompat: hit.document.runtimeCompat,
-      updatedAt: hit.document.updatedAt,
-      latestVersion: hit.document.latestVersion
-    })) || [];
-
-    // Fetch download stats for each package (in parallel)
-    const packagesWithDownloads = await Promise.all(
-      packages.map(async (pkg: any) => {
-        try {
-          const downloadSummary = await getPackageDownloadSummary(pkg.scope, pkg.name);
-          // Also fetch basic package details if version/updated info is missing
-          let packageDetails = null;
-          if (!pkg.latestVersion || !pkg.updatedAt) {
-            try {
-              packageDetails = await getPackageDetails(pkg.scope, pkg.name);
-            } catch (_detailError: unknown) {
-              // Ignore if details fetch fails
-            }
-          }
-
-          return {
-            ...pkg,
-            totalDownloads: downloadSummary.totalDownloads || 0,
-            recentDownloads: downloadSummary.recentDownloads || 0,
-            latestVersion: pkg.latestVersion || packageDetails?.latestVersion || downloadSummary.latestVersion || 'Unknown',
-            updatedAt: pkg.updatedAt || packageDetails?.updatedAt || undefined
-          };
-        } catch (error) {
-          return {
-            ...pkg,
-            totalDownloads: 0,
-            recentDownloads: 0,
-            latestVersion: pkg.latestVersion || 'Unknown',
-            updatedAt: pkg.updatedAt || undefined
-          };
-        }
-      })
-    );
+    // Convert enhanced hits to the format expected by formatDiscoveredPackages
+    const packages = results.hits?.map((hit: any) => {
+      const pkg = hit.document;
+      const downloads = hit.downloads;
+      
+      return {
+        id: pkg.id,
+        name: pkg.name,
+        scope: pkg.scope,
+        description: pkg.description,
+        score: hit.score,
+        runtimeCompat: pkg.runtimeCompat,
+        updatedAt: pkg.updatedAt,
+        latestVersion: pkg.latestVersion || downloads?.latestVersion || 'Unknown',
+        // Include download information from enhanced results
+        totalDownloads: downloads?.totalDownloads || 0,
+        recentDownloads: downloads?.recentDownloads || 0
+      };
+    }) || [];
 
     // Group packages by scope for better organization
-    const packagesByScope = packagesWithDownloads.reduce((acc: any, pkg: any) => {
+    const packagesByScope = packages.reduce((acc: any, pkg: any) => {
       const scope = pkg.scope || 'unscoped';
       if (!acc[scope]) acc[scope] = [];
       acc[scope].push(pkg);
       return acc;
     }, {});
 
-    const summary = formatDiscoveredPackages(category, packagesWithDownloads);
+    const summary = formatDiscoveredPackages(category, packages);
 
     return {
       content: [{
@@ -288,8 +214,8 @@ server.tool("discover", {
       }],
       meta: {
         category: category,
-        totalResults: packagesWithDownloads.length,
-        packages: packagesWithDownloads,
+        totalResults: packages.length,
+        packages: packages,
         packagesByScope: packagesByScope
       }
     };

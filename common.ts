@@ -76,6 +76,7 @@ export interface OramaSearchOptions {
   offset?: number;
   mode?: "fulltext" | "vector" | "hybrid";
   boost?: Record<string, number>;
+  includeDownloads?: boolean;
   // Add other valid search parameters as needed
 }
 
@@ -230,18 +231,19 @@ export function createOramaClient(): OramaClient {
  * @param options - Search options including limit, offset, and other parameters
  * @param options.limit - Maximum number of results to return (default: 20)
  * @param options.offset - Number of results to skip (default: 0)
- * @returns Promise resolving to raw Orama search results
+ * @param options.includeDownloads - Whether to fetch download statistics for each package (default: true)
+ * @returns Promise resolving to search results, optionally enhanced with download data
  * @throws Error if the search request fails
  * @example
  * ```typescript
- * const results = await queryOrama("web framework", { limit: 10 });
+ * const results = await queryOrama("web framework", { limit: 10, includeDownloads: true });
  * console.log(results.hits.map(hit => hit.document.name));
  * ```
  */
 export async function queryOrama(
     query: string,
     options: OramaSearchOptions = {},
-): Promise<OramaSearchResult> {
+): Promise<OramaSearchResult | EnhancedOramaSearchResult> {
     const client = createOramaClient();
     const searchParams = {
         term: query,
@@ -269,7 +271,41 @@ export async function queryOrama(
             };
         }
 
-        return res as OramaSearchResult;
+        const basicResult = res as OramaSearchResult;
+        
+        // If downloads explicitly disabled, return basic result
+        if (options.includeDownloads === false) {
+            return basicResult;
+        }
+
+        // Enhance results with download information (default behavior)
+        const enhancedHits: EnhancedOramaHit[] = [];
+        
+        if (basicResult.hits?.length) {
+            // Fetch download data for all packages in parallel
+            const downloadPromises = basicResult.hits.map(async (hit): Promise<EnhancedOramaHit> => {
+                try {
+                    const downloads = await getPackageDownloadSummary(hit.document.scope, hit.document.name);
+                    return {
+                        ...hit,
+                        downloads: downloads.error ? undefined : downloads
+                    };
+                } catch (_error: unknown) {
+                    // If download fetch fails, return hit without download data
+                    return { ...hit };
+                }
+            });
+            
+            const results = await Promise.all(downloadPromises);
+            enhancedHits.push(...results);
+        }
+
+        return {
+            count: basicResult.count,
+            hits: enhancedHits,
+            error: basicResult.error
+        } as EnhancedOramaSearchResult;
+
     } catch (error: unknown) {
         // Handle API errors gracefully
         if (error instanceof Error && "httpResponse" in error) {
@@ -303,7 +339,8 @@ export async function queryOrama(
  * @param query - Search query string
  * @param options - Search options including limit and other parameters
  * @param options.limit - Maximum number of results to return (default: 10)
- * @returns Promise resolving to search results with improved relevance scoring
+ * @param options.includeDownloads - Whether to fetch download statistics for each package (default: true)
+ * @returns Promise resolving to search results with improved relevance scoring, optionally enhanced with download data
  * @example
  * ```typescript
  * const results = await relevanceSearch("http client", { limit: 5 });
@@ -312,11 +349,12 @@ export async function queryOrama(
 export async function relevanceSearch(
     query: string,
     options: OramaSearchOptions = {},
-): Promise<OramaSearchResult> {
+): Promise<OramaSearchResult | EnhancedOramaSearchResult> {
     return await queryOrama(query, {
         ...options,
         mode: "fulltext",
         limit: options.limit || 10,
+        includeDownloads: options.includeDownloads !== false, // Default to true
         boost: {
             description: 2.0,
             name: 1.5,

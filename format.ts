@@ -8,7 +8,15 @@ export function formatSearchResults(query: string, packages: any[]): string {
     const scoreText = pkg.score ? ` (Score: ${pkg.score.toFixed(2)})` : '';
     const versionText = pkg.latestVersion ? `v${pkg.latestVersion}` : 'Unknown version';
     const updatedText = pkg.updatedAt ? ` | Updated: ${new Date(pkg.updatedAt).toLocaleDateString()}` : '';
-    const downloadText = pkg.totalDownloads ? ` | Downloads: ${pkg.totalDownloads.toLocaleString()}` : '';
+    
+    // Handle download information with recent downloads if available
+    let downloadText = '';
+    if (pkg.totalDownloads && pkg.totalDownloads > 0) {
+      downloadText = ` | Downloads: ${pkg.totalDownloads.toLocaleString()}`;
+      if (pkg.recentDownloads && pkg.recentDownloads > 0) {
+        downloadText += ` (${pkg.recentDownloads.toLocaleString()} recent)`;
+      }
+    }
 
     const runtimes = pkg.runtimeCompat
       ? Object.entries(pkg.runtimeCompat)
