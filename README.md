@@ -26,7 +26,7 @@ Add to your `claude_desktop_config.json`:
 {
   "mcpServers": {
     "jsr": {
-      "command": "deno",
+      "command": "path/to/your/deno",
       "args": [
         "run",
         "--allow-net=jsr.io,api.jsr.io,cloud.orama.run",
@@ -39,7 +39,7 @@ Add to your `claude_desktop_config.json`:
 }
 ```
 
-> **NOTE:** You may need to replace the path to the `deno` command to the full path to your deno installation for it to work. *(Use `which deno` to find this path)*
+> **NOTE:** Replace the `path/to/your/deno` command to the full path to your deno installation for it to work. *(Use `which deno` to find this path)*
 
 ### As a Command-Line Utility
 
