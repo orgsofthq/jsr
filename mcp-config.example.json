@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "jsr": {
+      "command": "deno",
+      "args": [
+        "run",
+        "--allow-net=jsr.io,api.jsr.io,cloud.orama.run",
+        "--allow-run",
+        "jsr:@orgsoft/jsr@^1",
+        "mcp"
+      ]
+    }
+  }
+}
